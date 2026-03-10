@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIFA - Pontos Corridos Oficial</title>
+    <style>
+        :root { --bg: #050505; --card: #111; --neon: #00ff87; --text: #fff; --dim: #666; --gold: #ffd700; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1100px; }
+        
+        header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid var(--neon); padding-bottom: 10px; }
+        .nav-box { background: #1a1a1a; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; gap: 15px; }
+        select { background: #000; color: var(--neon); border: 1px solid var(--neon); padding: 8px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+
+        .table-container { background: var(--card); border-radius: 12px; padding: 15px; overflow-x: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.6); margin-bottom: 40px; }
+        table { width: 100%; border-collapse: collapse; min-width: 950px; }
+        th { text-align: left; color: var(--dim); font-size: 0.65rem; text-transform: uppercase; padding: 12px; border-bottom: 2px solid #222; }
+        td { padding: 14px 10px; border-bottom: 1px solid #1a1a1a; font-size: 1rem; }
+        
+        /* Prioridade Visual nos Pontos */
+        .col-pts { color: var(--neon); font-weight: 900; font-size: 1.2rem; background: rgba(0,255,135,0.05); text-align: center; }
+        .pos-verde { color: var(--neon); font-weight: bold; width: 40px; }
+        .campeao-row { background: rgba(255, 215, 0, 0.03); }
+
+        /* Estatísticas de Apoio (Cinzas para não confundir com a pontuação) */
+        .stats-apoio { color: #888; font-size: 0.85rem; font-style: italic; }
+        .badge-geral { color: var(--gold); font-weight: bold; }
+
+        /* Galeria */
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; width: 100%; }
+        .card { background: #1a1a1a; padding: 15px; border-radius: 10px; text-align: center; border-top: 3px solid var(--gold); }
+        
+        #adminArea { display: none; background: #1a1a1a; padding: 20px; border-radius: 12px; margin-top: 25px; border: 1px solid #333; width: 100%; box-sizing: border-box; }
+        .row-edit { display: grid; grid-template-columns: 2fr repeat(5, 1fr) 40px; gap: 5px; margin-bottom: 5px; }
+        input { background: #000; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 5px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>FIFA <span style="color:var(--neon)">LEAGUE</span></h1>
+        <p style="color:var(--dim); font-size: 0.8rem; margin:0;">CRITÉRIO: PONTOS > VITÓRIAS > SALDO > GOLS PRÓ</p>
+    </header>
+
+    <div class="nav-box">
+        <span>Visualizar:</span>
+        <select id="viewSelect" onchange="updateView(this.value)"></select>
+    </div>
+
+    <div class="table-container">
+        <table id="tabelaMain">
+            <thead>
+                <tr>
+                    <th>Pos</th>
+                    <th>Jogador</th>
+                    <th class="geral-only">🏆 Tit.</th>
+                    <th class="geral-only">🎮 Part.</th>
+                    <th style="text-align: center;">PTS</th>
+                    <th>J</th>
+                    <th>V</th>
+                    <th>E</th>
+                    <th>D</th>
+                    <th>GP</th>
+                    <th>GC</th>
+                    <th>SG</th>
+                    <th>% Aprov.</th>
+                    <th>Desemp.</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <h2 style="color:var(--gold); text-align: center; font-size: 1.2rem; text-transform: uppercase;">🏆 Galeria de Campeões</h2>
+    <div id="gallery" class="gallery"></div>
+
+    <button onclick="toggleAdmin()" style="background:none; border:none; color:#111; margin-top:50px; cursor:pointer;">Acesso Admin</button>
+
+    <div id="adminArea">
+        <div id="editList"></div>
+        <button onclick="addPlayer()" style="width:100%; padding:10px; margin-top:10px; background:none; border: 1px dashed var(--neon); color:var(--neon)">+ Novo Jogador</button>
+        <button onclick="saveData()" style="width:100%; padding:10px; margin-top:10px; background:var(--neon); color:#000; font-weight:bold">SALVAR PONTUAÇÃO</button>
+        <button onclick="closeSeason()" style="width:100%; padding:10px; margin-top:30px; background:red; color:#fff">🔒 FECHAR TEMPORADA</button>
+    </div>
+</div>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('fifa_classic_v5')) || { atual: [], historico: [] };
+    let viewMode = 'atual';
+
+    function updateView(v) { viewMode = v; render(); }
+
+    function render() {
+        const tbody = document.querySelector("#tabelaMain tbody");
+        const select = document.getElementById('viewSelect');
+        const gallery = document.getElementById('gallery');
+        
+        select.innerHTML = `<option value="atual" ${viewMode==='atual'?'selected':''}>Temporada Atual</option><option value="geral" ${viewMode==='geral'?'selected':''}>Ranking Geral (Títulos)</option>`;
+        db.historico.forEach((t, i) => select.innerHTML += `<option value="${i}" ${viewMode==i?'selected':''}>${t.nome}</option>`);
+
+        let lista = (viewMode === 'atual') ? [...db.atual] : (viewMode === 'geral' ? processarGeral() : [...db.historico[viewMode].dados]);
+        
+        document.querySelectorAll('.geral-only').forEach(el => el.style.display = (viewMode === 'geral' ? 'table-cell' : 'none'));
+
+        // --- LÓGICA DE ORDENAÇÃO DE PONTOS CORRIDOS ---
+        lista.sort((a,b) => {
+            let ptsA = (a.v*3)+a.e, ptsB = (b.v*3)+b.e;
+            let sgA = a.gp-a.gc, sgB = b.gp-b.gc;
+
+            if(viewMode === 'geral') return b.titulos - a.titulos || ptsB - ptsA;
+            
+            // 1. Pontos | 2. Vitórias | 3. Saldo | 4. Gols Pró
+            return ptsB - ptsA || b.v - a.v || sgB - sgA || b.gp - a.gp;
+        });
+
+        tbody.innerHTML = lista.map((j, i) => {
+            let pts = (j.v*3)+j.e;
+            let jogos = j.v+j.e+j.d;
+            let aprov = jogos > 0 ? ((pts / (jogos * 3)) * 100).toFixed(1) : "0.0";
+            let desempenho = ((i<3?(20-i*5):0) + (j.gp*2.5) + (j.gc*-2)).toFixed(1);
+
+            return `<tr class="${i==0?'campeao-row':''}">
+                <td class="pos-verde">${i+1}º</td>
+                <td style="font-weight:bold">${j.nome} ${i==0?'🏆':''}</td>
+                ${viewMode==='geral' ? `<td class="badge-geral">${j.titulos}</td><td class="stats-apoio">${j.participacoes}</td>` : ''}
+                <td class="col-pts">${pts}</td>
+                <td>${jogos}</td>
+                <td>${j.v}</td><td>${j.e}</td><td>${j.d}</td>
+                <td style="color:var(--neon)">${j.gp}</td><td style="color:red">${j.gc}</td>
+                <td style="font-weight:bold">${j.gp-j.gc}</td>
+                <td class="stats-apoio">${aprov}%</td>
+                <td class="stats-apoio">${desempenho}</td>
+            </tr>`;
+        }).join('');
+
+        gallery.innerHTML = db.historico.map(t => {
+            let win = [...t.dados].sort((a,b) => ((b.v*3)+b.e) - ((a.v*3)+a.e) || b.v-a.v || (b.gp-b.gc)-(a.gp-a.gc))[0];
+            return `<div class="card"><div style="font-size:0.6rem; color:#888;">${t.nome}</div><div style="font-weight:bold; margin-top:5px;">🥇 ${win ? win.nome : '---'}</div></div>`;
+        }).reverse().join('');
+    }
+
+    function processarGeral() {
+        let res = {};
+        [...db.historico, { dados: db.atual }].forEach(temp => {
+            let ord = [...temp.dados].sort((a,b) => ((b.v*3)+b.e) - ((a.v*3)+a.e) || b.v-a.v || (b.gp-b.gc)-(a.gp-a.gc));
+            temp.dados.forEach(j => {
+                if(!res[j.nome]) res[j.nome] = {nome:j.nome, v:0, e:0, d:0, gp:0, gc:0, titulos:0, participacoes:0};
+                res[j.nome].v += j.v; res[j.nome].e += j.e; res[j.nome].d += j.d;
+                res[j.nome].gp += j.gp; res[j.nome].gc += j.gc;
+                res[j.nome].participacoes += 1;
+                if(ord[0] && j.nome === ord[0].nome && (j.v+j.e+j.d > 0)) res[j.nome].titulos += 1;
+            });
+        });
+        return Object.values(res).map(j => ({...j, pts: (j.v*3)+j.e}));
+    }
+
+    function toggleAdmin() { document.getElementById('adminArea').style.display = 'block'; renderAdmin(); }
+    function renderAdmin() {
+        document.getElementById('editList').innerHTML = db.atual.map((j,i) => `
+            <div class="row-edit">
+                <input type="text" value="${j.nome}" onchange="db.atual[${i}].nome=this.value" style="text-align:left">
+                <input type="number" value="${j.v}" onchange="db.atual[${i}].v=parseInt(this.value)">
+                <input type="number" value="${j.e}" onchange="db.atual[${i}].e=parseInt(this.value)">
+                <input type="number" value="${j.d}" onchange="db.atual[${i}].d=parseInt(this.value)">
+                <input type="number" value="${j.gp}" onchange="db.atual[${i}].gp=parseInt(this.value)">
+                <input type="number" value="${j.gc}" onchange="db.atual[${i}].gc=parseInt(this.value)">
+                <button onclick="db.atual.splice(${i},1); renderAdmin()" style="background:none; border:none; color:red; cursor:pointer">✖</button>
+            </div>
+        `).join('');
+    }
+    function addPlayer() { db.atual.push({nome:"Novo", v:0, e:0, d:0, gp:0, gc:0}); renderAdmin(); }
+    function saveData() { localStorage.setItem('fifa_classic_v5', JSON.stringify(db)); render(); alert("Tabela Atualizada!"); }
+    function closeSeason() { let n = prompt("Nome da Temporada:"); if(n) { db.historico.push({ nome: n, dados: JSON.parse(JSON.stringify(db.atual)) }); db.atual = db.atual.map(j => ({...j, v:0, e:0, d:0, gp:0, gc:0})); saveData(); } }
+
+    render();
+</script>
+</body>
+</html>
